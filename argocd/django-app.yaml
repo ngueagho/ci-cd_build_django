@@ -1,0 +1,21 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: django-app
+  namespace: roberto
+  annotations:
+    argocd-image-updater.argoproj.io/image-list: ghcr.io/ngueagho/ci-cd_build_django/django-app
+    argocd-image-updater.argoproj.io/django-app.update-strategy: latest
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/ngueagho/ci-cd_build_django.git
+    targetRevision: main
+    path: k8s
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: roberto
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

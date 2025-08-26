@@ -1,0 +1,7 @@
+# Django framework
+Django>=5.2,<6
+
+# Pour charger des variables d'environnement depuis un fichier .env (optionnel)
+python-dotenv>=1.0
+
+gunicorn
