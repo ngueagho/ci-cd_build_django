@@ -46,11 +46,13 @@ jobs:
           cd argocd-repo
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
+          # Forcer le remote à utiliser le PAT
           git remote set-url origin https://x-access-token:${{ secrets.ARGOCD_PAT }}@github.com/ngueagho/argocd.git
           git add k8s/deployment.yaml
           git commit -m "Update image to $IMAGE"
-          git push 
-          
+          git push origin main
+
+
 
 
 
