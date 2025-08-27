@@ -49,7 +49,8 @@ jobs:
           git remote set-url origin https://x-access-token:${{ secrets.ARGOCD_PAT }}@github.com/ngueagho/argocd.git
           git add k8s/deployment.yaml
           git commit -m "Update image to $IMAGE"
-          git push
+          git push 
+          
 
 
 
