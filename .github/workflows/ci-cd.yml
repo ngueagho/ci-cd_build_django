@@ -5,31 +5,45 @@ on:
     branches: ["main"]
 
 jobs:
-  build-and-push:
+  build-and-update-argocd:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      # 1. Checkout du repo Django
+      - name: Checkout Django code
         uses: actions/checkout@v3
 
+      # 2. Login Docker
       - name: Log in to Docker Hub
         uses: docker/login-action@v2
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
+      # 3. Build et push de l'image Docker
       - name: Build Docker image
         run: |
           IMAGE=${{ secrets.DOCKER_USERNAME }}/django-app
           docker build -t $IMAGE:${{ github.sha }} .
           docker push $IMAGE:${{ github.sha }}
 
-      - name: Update Kubernetes manifests
+      # 4. Checkout du repo ArgoCD pour mise à jour
+      - name: Checkout ArgoCD repo
+        uses: actions/checkout@v3
+        with:
+          repository: ngueagho/argocd
+          token: ${{ secrets.GITHUB_TOKEN }}
+          path: argocd-repo  # clone dans ce dossier
+
+      # 5. Mettre à jour le manifeste Kubernetes dans ArgoCD repo
+      - name: Update Kubernetes deployment image
         run: |
           IMAGE=${{ secrets.DOCKER_USERNAME }}/django-app:${{ github.sha }}
-          sed -i "s|image: .*|image: $IMAGE|" k8s/deployment.yaml
+          sed -i "s|image: .*|image: $IMAGE|" argocd-repo/k8s/deployment.yaml
 
-      - name: Commit changes
+      # 6. Commit et push vers ArgoCD repo
+      - name: Commit changes to ArgoCD repo
         run: |
+          cd argocd-repo
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
           git add k8s/deployment.yaml
