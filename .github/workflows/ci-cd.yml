@@ -21,10 +21,17 @@ jobs:
         run: |
           IMAGE=${{ secrets.DOCKER_USERNAME }}/django-app
           docker build -t $IMAGE:${{ github.sha }} .
-          docker tag $IMAGE:${{ github.sha }} $IMAGE:latest
-
-      - name: Push Docker image
-        run: |
-          IMAGE=${{ secrets.DOCKER_USERNAME }}/django-app
           docker push $IMAGE:${{ github.sha }}
-          docker push $IMAGE:latest
+
+      - name: Update Kubernetes manifests
+        run: |
+          IMAGE=${{ secrets.DOCKER_USERNAME }}/django-app:${{ github.sha }}
+          sed -i "s|image: .*|image: $IMAGE|" k8s/deployment.yaml
+
+      - name: Commit changes
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add k8s/deployment.yaml
+          git commit -m "Update image to $IMAGE"
+          git push

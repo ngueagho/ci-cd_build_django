@@ -4,7 +4,7 @@ metadata:
   name: django-app
   namespace: roberto
   annotations:
-    argocd-image-updater.argoproj.io/image-list: ghcr.io/ngueagho/ci-cd_build_django/django-app
+    argocd-image-updater.argoproj.io/image-list: docker.io/ngueagho/django-app
     argocd-image-updater.argoproj.io/django-app.update-strategy: latest
 spec:
   project: default

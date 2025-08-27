@@ -15,6 +15,6 @@ spec:
     spec:
       containers:
         - name: django
-          image: ghcr.io/ngueagho/ci-cd_build_django/django-app:latest
+          image: docker.io/ngueagho/django-app:latest
           ports:
             - containerPort: 8000
