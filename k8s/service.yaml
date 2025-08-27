@@ -2,7 +2,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: django-service
-  namespace: roberto
+  namespace: argocd
 spec:
   selector:
     app: django-app
