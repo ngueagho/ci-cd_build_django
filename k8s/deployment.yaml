@@ -15,6 +15,6 @@ spec:
     spec:
       containers:
         - name: django
-          image: docker.io/ngueagho/django-app:latest
+          image: docker.io/robertolandry/django-app:latest
           ports:
             - containerPort: 8000
