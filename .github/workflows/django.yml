@@ -1,4 +1,4 @@
-name: Django - Deploy to Development
+name: Django - Deploy to Development ...
 
 on:
   push:
