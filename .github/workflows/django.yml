@@ -2,9 +2,9 @@ name: Django - Deploy to Development
 
 on:
   push:
-    branches: [develop]
+    branches: ["develop", "main"]
     paths:
-      - 'backend/**'  # Adjust path to your Django app
+      - 'monsite/**'  # Adjust path to your Django app
   workflow_dispatch:
 
 env:
