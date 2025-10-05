@@ -1,0 +1,395 @@
+version: '3.8'
+
+# Django Development Environment
+# Complete stack with Django, Celery, PostgreSQL, Redis and supporting services
+
+services:
+  # ======================================================================
+  # Web Application - Django
+  # ======================================================================
+  web:
+    build:
+      context: ../../  # Adjust to your Django project path
+      dockerfile: dockerfiles/django/Dockerfile.dev
+    ports:
+      - "8000:8000"    # Django dev server
+    volumes:
+      - ../../backend:/app:cached  # Hot reload support
+      - /app/staticfiles          # Preserve static files
+      - /app/media               # Preserve media files
+    environment:
+      - DEBUG=True
+      - SECRET_KEY=dev-secret-key-change-in-production
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/djangodb
+      - REDIS_URL=redis://:devpassword@redis:6379/0
+      - CELERY_BROKER_URL=redis://:devpassword@redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://:devpassword@redis:6379/2
+      - EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
+      - EMAIL_HOST=mailhog
+      - EMAIL_PORT=1025
+      - MEDIA_URL=/media/
+      - STATIC_URL=/static/
+      - ALLOWED_HOSTS=localhost,127.0.0.1,web
+      - CORS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:8080
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrations:
+        condition: service_completed_successfully
+    networks:
+      - backend-network
+      - frontend-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # ======================================================================
+  # Database Migrations
+  # ======================================================================
+  migrations:
+    build:
+      context: ../../
+      dockerfile: dockerfiles/django/Dockerfile.dev
+    volumes:
+      - ../../backend:/app:cached
+    environment:
+      - DEBUG=True
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/djangodb
+      - SECRET_KEY=dev-secret-key-change-in-production
+    command: ["python", "manage.py", "migrate"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - backend-network
+    restart: "no"
+
+  # ======================================================================
+  # Background Tasks - Celery Worker
+  # ======================================================================
+  celery-worker:
+    build:
+      context: ../../
+      dockerfile: dockerfiles/django/Dockerfile.dev
+    volumes:
+      - ../../backend:/app:cached
+    environment:
+      - DEBUG=True
+      - SECRET_KEY=dev-secret-key-change-in-production
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/djangodb
+      - REDIS_URL=redis://:devpassword@redis:6379/0
+      - CELERY_BROKER_URL=redis://:devpassword@redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://:devpassword@redis:6379/2
+    command: ["celery", "-A", "myproject", "worker", "--loglevel=info", "--concurrency=2"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - backend-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "celery", "-A", "myproject", "inspect", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # ======================================================================
+  # Task Scheduler - Celery Beat
+  # ======================================================================
+  celery-beat:
+    build:
+      context: ../../
+      dockerfile: dockerfiles/django/Dockerfile.dev
+    volumes:
+      - ../../backend:/app:cached
+      - celery_beat_data:/app/celerybeat-schedule
+    environment:
+      - DEBUG=True
+      - SECRET_KEY=dev-secret-key-change-in-production
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/djangodb
+      - REDIS_URL=redis://:devpassword@redis:6379/0
+      - CELERY_BROKER_URL=redis://:devpassword@redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://:devpassword@redis:6379/2
+    command: ["celery", "-A", "myproject", "beat", "--loglevel=info"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - backend-network
+    restart: unless-stopped
+
+  # ======================================================================
+  # Task Monitoring - Flower
+  # ======================================================================
+  flower:
+    build:
+      context: ../../
+      dockerfile: dockerfiles/django/Dockerfile.dev
+    ports:
+      - "5555:5555"
+    environment:
+      - CELERY_BROKER_URL=redis://:devpassword@redis:6379/1
+      - FLOWER_PORT=5555
+    command: ["celery", "-A", "myproject", "flower", "--port=5555"]
+    depends_on:
+      - redis
+      - celery-worker
+    networks:
+      - backend-network
+    restart: unless-stopped
+
+  # ======================================================================
+  # Database - PostgreSQL
+  # ======================================================================
+  postgres:
+    image: postgres:15-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: djangodb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-scripts:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d djangodb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - backend-network
+    restart: unless-stopped
+
+  # ======================================================================
+  # Cache & Message Broker - Redis
+  # ======================================================================
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --requirepass devpassword --databases 16
+    volumes:
+      - redis_data:/data
+      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    healthcheck:
+      test: ["CMD", "redis-cli", "auth", "devpassword", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks:
+      - backend-network
+    restart: unless-stopped
+
+  # ======================================================================
+  # File Storage - MinIO (S3 compatible)
+  # ======================================================================
+  minio:
+    image: minio/minio:latest
+    ports:
+      - "9000:9000"      # API
+      - "9001:9001"      # Console
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin123
+      MINIO_DEFAULT_BUCKETS: django-media,django-static
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+      start_period: 30s
+    networks:
+      - backend-network
+    restart: unless-stopped
+
+  # ======================================================================
+  # Search Engine - Elasticsearch
+  # ======================================================================
+  elasticsearch:
+    image: elasticsearch:8.11.0
+    ports:
+      - "9200:9200"
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9200/_cluster/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - backend-network
+    restart: unless-stopped
+
+  # ======================================================================
+  # Frontend API Mock - For frontend development
+  # ======================================================================
+  api-mock:
+    image: mockoon/cli:latest
+    ports:
+      - "3001:3000"
+    volumes:
+      - ./mockoon/django-api-mock.json:/data/api-mock.json:ro
+    command: ["mockoon-cli", "start", "--data", "/data/api-mock.json", "--port", "3000"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - frontend-network
+    restart: unless-stopped
+
+  # ======================================================================
+  # Monitoring - Prometheus
+  # ======================================================================
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    networks:
+      - monitoring-network
+      - backend-network
+    restart: unless-stopped
+
+  # ======================================================================
+  # Monitoring - Grafana
+  # ======================================================================
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_INSTALL_PLUGINS: grafana-clock-panel,grafana-simple-json-datasource
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - prometheus
+    networks:
+      - monitoring-network
+    restart: unless-stopped
+
+  # ======================================================================
+  # Development Tools - MailHog (Email testing)
+  # ======================================================================
+  mailhog:
+    image: mailhog/mailhog:latest
+    ports:
+      - "1025:1025"     # SMTP
+      - "8025:8025"     # Web UI
+    networks:
+      - backend-network
+    restart: unless-stopped
+
+  # ======================================================================
+  # Development Tools - Adminer (Database management)
+  # ======================================================================
+  adminer:
+    image: adminer:latest
+    ports:
+      - "8080:8080"
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
+    depends_on:
+      - postgres
+    networks:
+      - backend-network
+    restart: unless-stopped
+
+  # ======================================================================
+  # Development Tools - Redis Commander
+  # ======================================================================
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    ports:
+      - "8081:8081"
+    environment:
+      REDIS_HOSTS: local:redis:6379:1:devpassword
+    depends_on:
+      - redis
+    networks:
+      - backend-network
+    restart: unless-stopped
+
+  # ======================================================================
+  # Reverse Proxy - Traefik
+  # ======================================================================
+  traefik:
+    image: traefik:v3.0
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8082:8080"     # Dashboard
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./traefik/dynamic:/etc/traefik/dynamic:ro
+    networks:
+      - frontend-network
+      - backend-network
+      - monitoring-network
+    restart: unless-stopped
+
+# ======================================================================
+# Networks
+# ======================================================================
+networks:
+  frontend-network:
+    driver: bridge
+  backend-network:
+    driver: bridge
+  monitoring-network:
+    driver: bridge
+
+# ======================================================================
+# Volumes
+# ======================================================================
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  minio_data:
+    driver: local
+  elasticsearch_data:
+    driver: local
+  celery_beat_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local

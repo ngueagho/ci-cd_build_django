@@ -1,0 +1,48 @@
+# Docker Compose Override for Django Development
+# This file provides simplified setup for basic development
+
+version: '3.8'
+
+services:
+  # ======================================================================
+  # Simplified Web Application (Hot reload only)
+  # ======================================================================
+  web:
+    environment:
+      - DEBUG=True
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/djangodb
+      - REDIS_URL=redis://:devpassword@redis:6379/0
+      - CELERY_BROKER_URL=redis://:devpassword@redis:6379/1
+    volumes:
+      - ../../backend:/app:cached
+      - /app/staticfiles
+      - /app/media
+
+  # ======================================================================
+  # Minimal setup - comment out heavy services
+  # ======================================================================
+
+  # Optional: Remove heavy services for basic development
+  # Comment out these services if you want minimal setup
+  # elasticsearch:
+  #   profiles: ["full"]
+
+  # celery-worker:
+  #   profiles: ["background-tasks"]
+
+  # celery-beat:
+  #   profiles: ["background-tasks"]
+
+  # flower:
+  #   profiles: ["monitoring"]
+
+  # prometheus:
+  #   profiles: ["monitoring"]
+
+  # grafana:
+  #   profiles: ["monitoring"]
+
+  # traefik:
+  #   profiles: ["production-like"]
+
+# Additional configurations for different development scenarios

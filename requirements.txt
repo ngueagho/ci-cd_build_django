@@ -1,7 +1,47 @@
-# Django framework
-Django>=5.2,<6
+# Django Production Requirements
 
-# Pour charger des variables d'environnement depuis un fichier .env (optionnel)
-python-dotenv>=1.0
+# Core Django
+Django>=4.2,<5.0
+django-environ>=0.11.0
 
-gunicorn
+# Database
+psycopg2-binary>=2.9.0
+
+# WSGI Server
+gunicorn>=21.0.0
+gevent>=23.0.0
+
+# Static files and media
+whitenoise>=6.5.0
+Pillow>=10.0.0
+
+# API Framework
+djangorestframework>=3.14.0
+django-cors-headers>=4.3.0
+
+# Authentication & Security
+django-allauth>=0.57.0
+django-crispy-forms>=2.0
+crispy-bootstrap5>=0.7
+
+# Caching
+redis>=5.0.0
+django-redis>=5.3.0
+
+# Celery for background tasks
+celery>=5.3.0
+django-celery-beat>=2.5.0
+django-celery-results>=2.5.0
+
+# Monitoring & Logging
+sentry-sdk>=1.32.0
+django-extensions>=3.2.0
+
+# Environment & Configuration
+python-decouple>=3.8
+dj-database-url>=2.1.0
+
+# Utilities
+requests>=2.31.0
+python-dateutil>=2.8.0
+pytz>=2023.3
